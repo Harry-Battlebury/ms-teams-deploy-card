@@ -100,14 +100,32 @@ export async function getWorkflowRunStatus() {
     (job) => job.name === process.env.GITHUB_JOB
   );
 
-  let lastStep;
-  const stoppedStep = job?.steps?.find(
-    (step) =>
-      step.conclusion === "failure" ||
-      step.conclusion === "timed_out" ||
-      step.conclusion === "cancelled" ||
-      step.conclusion === "action_required"
-  );
+  let lastStep = {} as Octokit.ActionsListJobsForWorkflowRunResponseJobsItemStepsItem
+  let jobStartDate
+
+// Use status fix from @patrickpaulin - https://github.com/toko-bifrost/ms-teams-deploy-card/pull/36
+  let abort = false
+  for(let job of workflowJobs.data.jobs) {
+    for(let step of job.steps) {
+      // check if current step still running
+      if (step.completed_at !== null) {
+        lastStep = step
+        jobStartDate = job.started_at
+        // Some step/job has failed. Get out from here.
+        if (step?.conclusion !== "success" && step?.conclusion !== "skipped") {
+            abort = true
+            break
+        }
+        /**  
+        * If nothing has failed, so we have a success scenario
+        * @note ignoring skipped cases. 
+        */
+        lastStep.conclusion = "success"
+      }
+    }
+    // // Some step/job has failed. Get out from here.
+    if (abort) break
+  }
 
   if (stoppedStep) {
     lastStep = stoppedStep;
